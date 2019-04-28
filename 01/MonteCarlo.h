@@ -22,12 +22,14 @@ private:
 	MyMPI *myMPI;
 	double totalEp;
 	void calcInitialDr();
+	int myRank, processes;
 	double calcContribution( int idx, double xx, double yy );
 	double calcContributionParallel(int idx, double xx, double yy);
 	double deltaEp( int idx, double oldX, double oldY, double newX, double newY );
 	double rnd() {
 		return random() * MAX_RANDOM;
 	}
+
 public:
 	MonteCarlo();
 	virtual ~MonteCarlo();
@@ -42,6 +44,8 @@ public:
 	}
 	void setMyMPI( MyMPI *myMPI ) {
 		this->myMPI = myMPI;
+		myMPI->MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+		myMPI->MPI_Comm_size(MPI_COMM_WORLD, &processes);
 	}
 	void setKBTinv( double kBTinv ) {
 		this->kBTinv = -kBTinv;

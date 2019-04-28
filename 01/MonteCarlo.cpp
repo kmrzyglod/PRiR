@@ -61,9 +61,6 @@ double MonteCarlo::calcContribution( int idx, double xx, double yy ) {
 }
 
 double MonteCarlo::calcContributionParallel(int idx, double xx, double yy) {
-	int myRank, processes;
-	myMPI->MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-	myMPI->MPI_Comm_size(MPI_COMM_WORLD, &processes);
 	//cout << "Process" << myRank << " All processes" << processes;
 
 	double sum = 0;
@@ -95,9 +92,6 @@ double MonteCarlo::calcTotalPotentialEnergy() {
 }
 
 double MonteCarlo::deltaEp(int idx, double oldX, double oldY, double newX, double newY ) {
-	int myRank;
-	myMPI->MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-	
 	double partialResult = calcContributionParallel(idx, newX, newY) - calcContributionParallel(idx, oldX, oldY);
 	double globalResult;
 	
@@ -109,9 +103,6 @@ double MonteCarlo::deltaEp(int idx, double oldX, double oldY, double newX, doubl
 // rozesłanie położeń cząstek z procesu o rank=0 do pozostałych
 void MonteCarlo::shareParticles() {
 	int num_of_particles = particles->getNumberOfParticles();
-	
-	int myRank;
-	myMPI->MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 	
 	double* x = new double[num_of_particles];
 	double* y = new double[num_of_particles];
@@ -145,9 +136,6 @@ void MonteCarlo::calcMC( int draws ) {
 	int accepted = 0;
 	int idx;
 	double xnew, ynew, xold, yold, dE, prob;
-	int myRank;
-	myMPI->MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-
 	//cout << "\nCalculating dE on process " << myRank << "particles num " << particles->getNumberOfParticles();
 
 	for ( int i = 0; i < draws; i++ ) {
@@ -165,10 +153,10 @@ void MonteCarlo::calcMC( int draws ) {
 // wyliczamy zmianę energii potencjalnej gdy cząstka idx
 // przestawiana jest z pozycji old na new
 		myMPI->MPI_Bcast(&idx, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		myMPI->MPI_Bcast(&xold, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		myMPI->MPI_Bcast(&yold, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		myMPI->MPI_Bcast(&xnew, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		myMPI->MPI_Bcast(&ynew, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		xold = particles->getX(idx);
+		yold = particles->getY(idx);
 
 		dE = deltaEp( idx, xold, yold, xnew, ynew );
 // pradopodobieństwo zależy od temperatury
