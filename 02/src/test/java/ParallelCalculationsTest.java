@@ -1,4 +1,3 @@
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -8,8 +7,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
 public class ParallelCalculationsTest {
@@ -33,8 +31,6 @@ public class ParallelCalculationsTest {
         parallelCalculations.start();
         Thread.sleep(200);
         parallelCalculations.terminate();
-
-
         //then
         long sumFromWorkers = parallelCalculations.getSum();
         long sumFromGenerator = generatorCounter.get() * 2;
@@ -86,19 +82,27 @@ public class ParallelCalculationsTest {
         });
         ParallelCalculations parallelCalculations = new ParallelCalculations();
 
-        //when
-        parallelCalculations.setNumberOfThreads(8);
+        //when && then
+        parallelCalculations.setNumberOfThreads(4);
         parallelCalculations.setPointGenerator(pointsGeneratorMock);
         parallelCalculations.createThreads();
         parallelCalculations.start();
         Thread.sleep(200);
         parallelCalculations.suspend();
+        assertSame(Thread.State.WAITING, parallelCalculations.getThread(1).getState());
         Thread.sleep(200);
+        assertSame(Thread.State.WAITING, parallelCalculations.getThread(1).getState());
         parallelCalculations.resume();
+        Thread.State state1 = parallelCalculations.getThread(1).getState();
+        System.out.println("Thread state : " + state1);
+        assertTrue(state1 == Thread.State.RUNNABLE || state1 == Thread.State.BLOCKED);
         Thread.sleep(100);
+        Thread.State state2 = parallelCalculations.getThread(1).getState();
+        assertTrue(state2 == Thread.State.RUNNABLE || state2 == Thread.State.BLOCKED);
         parallelCalculations.terminate();
+        Thread.State state3 = parallelCalculations.getThread(1).getState();
+        assertSame( Thread.State.TERMINATED, state3);
 
-        //then
         long sumFromWorkers = parallelCalculations.getSum();
         long sumFromGenerator = generatedPoints
                 .stream()
@@ -108,7 +112,41 @@ public class ParallelCalculationsTest {
         assertEquals(sumFromGenerator, sumFromWorkers);
     }
 
+    @Test
+    void checkParallelCalculationRandomPointsMethodExecutionTime() throws InterruptedException {
+        //given
+        List<PointGeneratorInterface.Point2D> generatedPoints = Collections.synchronizedList(new ArrayList<>());
+        PointGeneratorInterface pointsGeneratorMock = Mockito.mock(PointGeneratorInterface.class);
+        Random r = new Random();
+        when(pointsGeneratorMock.getPoint()).thenAnswer(invocation -> {
+            PointGeneratorInterface.Point2D randomPoint = new PointGeneratorInterface.Point2D(r.ints(0, PointGeneratorInterface.MAX_POSITION + 1).findFirst().getAsInt(), r.ints(0, PointGeneratorInterface.MAX_POSITION + 1).findFirst().getAsInt());
+            generatedPoints.add(randomPoint);
+            return randomPoint;
+        });
+        ParallelCalculations parallelCalculations = new ParallelCalculations();
 
+        long generationStartTime = System.nanoTime();
+        pointsGeneratorMock.getPoint();
+        long generationTime = System.nanoTime() - generationStartTime;
+
+        //when && then
+        parallelCalculations.setNumberOfThreads(8);
+        parallelCalculations.setPointGenerator(pointsGeneratorMock);
+        parallelCalculations.createThreads();
+        parallelCalculations.start();
+        Thread.sleep(200);
+        long suspendStartTime = System.nanoTime();
+        parallelCalculations.suspend();
+        long suspendTime = System.nanoTime() - suspendStartTime;
+        assertTrue(suspendTime <= 2 * generationTime);
+        Thread.sleep(200);
+        long resumeStartTime = System.nanoTime();
+        parallelCalculations.resume();
+        long resumeTime = System.nanoTime() - resumeStartTime;
+        assertTrue(resumeTime <= 2 * generationTime);
+        Thread.sleep(100);
+        parallelCalculations.terminate();
+    }
 
     @Test
     void parallelCalculationVsSequentialRandomPoints() throws InterruptedException {
@@ -134,7 +172,7 @@ public class ParallelCalculationsTest {
 
 
         generatedPoints.clear();
-        parallelCalculations.setNumberOfThreads(8);
+        parallelCalculations.setNumberOfThreads(2);
         parallelCalculations.setPointGenerator(pointsGeneratorMock);
         parallelCalculations.createThreads();
         parallelCalculations.start();
@@ -143,8 +181,44 @@ public class ParallelCalculationsTest {
         int parallelGeneratorCalls = generatedPoints.size();
 
         //then
-        assertTrue(parallelGeneratorCalls > seqentialGeneratorCalls);
         System.out.println("Sequential generated points : " + seqentialGeneratorCalls);
         System.out.println("Parallel generated points : " + parallelGeneratorCalls);
+        assertTrue(parallelGeneratorCalls > seqentialGeneratorCalls);
+
+    }
+
+    @Test
+    void checkTerminate() throws InterruptedException {
+        //given
+        List<PointGeneratorInterface.Point2D> generatedPoints = Collections.synchronizedList(new ArrayList<>());
+        PointGeneratorInterface pointsGeneratorMock = Mockito.mock(PointGeneratorInterface.class);
+        Random r = new Random();
+        when(pointsGeneratorMock.getPoint()).thenAnswer(invocation -> {
+            PointGeneratorInterface.Point2D randomPoint = new PointGeneratorInterface.Point2D(r.ints(0, PointGeneratorInterface.MAX_POSITION + 1).findFirst().getAsInt(), r.ints(0, PointGeneratorInterface.MAX_POSITION + 1).findFirst().getAsInt());
+            generatedPoints.add(randomPoint);
+            return randomPoint;
+        });
+        ParallelCalculations parallelCalculations = new ParallelCalculations();
+
+        //when
+        parallelCalculations.setNumberOfThreads(8);
+        parallelCalculations.setPointGenerator(pointsGeneratorMock);
+        parallelCalculations.createThreads();
+        parallelCalculations.start();
+        Thread.sleep(200);
+        parallelCalculations.suspend();
+        Thread.sleep(200);
+        parallelCalculations.resume();
+        Thread.sleep(100);
+        parallelCalculations.terminate();
+
+        //then
+        long sumFromWorkers = parallelCalculations.getSum();
+        long sumFromGenerator = generatedPoints
+                .stream()
+                .map(point -> point.firstCoordinate + point.secondCoordinate)
+                .reduce(0, Integer::sum);
+
+        assertEquals(sumFromGenerator, sumFromWorkers);
     }
 }
