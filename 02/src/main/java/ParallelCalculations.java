@@ -3,22 +3,21 @@ import java.util.stream.IntStream;
 
 public class ParallelCalculations implements ParallelCalculationsInterface, ThreadControllInterface {
     private PointGeneratorInterface pointGenerator;
+    private SynchronizationContext synchronizationContext = new SynchronizationContext();
     private int threadsNum;
     private Thread[] threads;
     private Worker[] workers;
 
-    //    private int[][] histogram;
-//    private int sum = 0;
     public void setPointGenerator(PointGeneratorInterface generator) {
         pointGenerator = generator;
     }
 
     public long getSum() {
-        return Worker.getSum();
+        return synchronizationContext.sum;
     }
 
     public int getCountsInBucket(int firstCoordinate, int secondCoordinate) {
-        return Worker.getHistogram()[firstCoordinate][secondCoordinate];
+        return synchronizationContext.histogram[firstCoordinate][secondCoordinate];
     }
 
     public void setNumberOfThreads(int threads) {
@@ -28,7 +27,7 @@ public class ParallelCalculations implements ParallelCalculationsInterface, Thre
     public void createThreads() {
         workers = IntStream
                 .range(0, threadsNum)
-                .mapToObj(i -> new Worker(pointGenerator))
+                .mapToObj(i -> new Worker(pointGenerator, synchronizationContext))
                 .toArray(Worker[]::new);
 
         threads = Arrays.stream(workers)
@@ -41,23 +40,26 @@ public class ParallelCalculations implements ParallelCalculationsInterface, Thre
     }
 
     public void start() {
-
-        Worker.initialize(0, new int[PointGenerator.MAX_POSITION][PointGenerator.MAX_POSITION]);
         Arrays.stream(threads)
                 .forEach(thread -> thread.start());
     }
 
     public void suspend() {
-        Arrays.stream(workers).forEach(worker -> worker.suspend());
+        synchronizationContext.suspend();
     }
 
     public void resume() {
-        Arrays.stream(workers).forEach(worker -> worker.resume());
-
+        synchronizationContext.resume();
     }
 
     public void terminate() {
-        Arrays.stream(workers).forEach(worker -> worker.terminate());
-
+        synchronizationContext.terminate();
+        Arrays.stream(threads).forEach(thread -> {
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
     }
 }
