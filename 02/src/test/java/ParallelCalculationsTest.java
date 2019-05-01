@@ -130,7 +130,7 @@ public class ParallelCalculationsTest {
         long generationTime = System.nanoTime() - generationStartTime;
 
         //when && then
-        parallelCalculations.setNumberOfThreads(8);
+        parallelCalculations.setNumberOfThreads(2);
         parallelCalculations.setPointGenerator(pointsGeneratorMock);
         parallelCalculations.createThreads();
         parallelCalculations.start();
@@ -138,6 +138,7 @@ public class ParallelCalculationsTest {
         long suspendStartTime = System.nanoTime();
         parallelCalculations.suspend();
         long suspendTime = System.nanoTime() - suspendStartTime;
+        System.out.println("Suspension time  : " + suspendTime + " time limit: " + 2 * generationTime);
         assertTrue(suspendTime <= 2 * generationTime);
         Thread.sleep(200);
         long resumeStartTime = System.nanoTime();

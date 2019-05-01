@@ -1,5 +1,6 @@
 import java.util.Arrays;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class ParallelCalculations implements ParallelCalculationsInterface, ThreadControllInterface {
     private PointGeneratorInterface pointGenerator;
@@ -46,6 +47,11 @@ public class ParallelCalculations implements ParallelCalculationsInterface, Thre
 
     public void suspend() {
         synchronizationContext.suspend();
+        while(true) {
+            if(Arrays.stream(threads).allMatch(thread -> thread.getState() == Thread.State.WAITING)) {
+                break;
+            }
+        }
     }
 
     public void resume() {
