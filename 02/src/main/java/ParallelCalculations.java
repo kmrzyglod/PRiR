@@ -94,9 +94,7 @@ class Worker implements Runnable {
         this.synchronizationContext.pauseNeeded();
         PointGeneratorInterface.Point2D point = generator.getPoint();
         synchronized (this.synchronizationContext) {
-            this.synchronizationContext.pauseNeeded();
             this.synchronizationContext.histogram[point.firstCoordinate][point.secondCoordinate]++;
-            this.synchronizationContext.pauseNeeded();
             this.synchronizationContext.sum += point.firstCoordinate + point.secondCoordinate;
         }
     }
