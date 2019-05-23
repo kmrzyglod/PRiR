@@ -32,3 +32,6 @@
 *.app
 /02/.idea
 /01/.vs/PRIR_01/v16
+/02/target
+/04/.vs/lab04/v16
+/04/Debug

@@ -16,7 +16,7 @@ const double DR_INITIAL_RATIO = 0.5 * ( DR_MAX + DR_MIN );
 const double BOX_SIZE = 250.0;
 const double DISTANCE = 0.8;
 
-const int PARTICLES = 40000;
+const int PARTICLES = 5000;
 const double PARTICLES_PER_TEMP_MULTI = 0.33;
 const int TEMPERATURES = 2;
 
