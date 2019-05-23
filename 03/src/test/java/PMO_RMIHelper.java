@@ -9,7 +9,7 @@ public class PMO_RMIHelper {
 
 	public static Registry getRegistry() {
 		try {
-			return LocateRegistry.getRegistry();
+			return LocateRegistry.getRegistry("localhost", 1099);
 		} catch (RemoteException e) {
 			e.printStackTrace();
 		}
@@ -18,8 +18,8 @@ public class PMO_RMIHelper {
 
 	public static boolean bind(Remote service, String serviceName) {
 		try {
-			getRegistry().bind(serviceName, service);
-		} catch (RemoteException | AlreadyBoundException e) {
+			getRegistry().rebind(serviceName, service);
+		} catch (RemoteException e) {
 			e.printStackTrace();
 			return false;
 		}

@@ -11,7 +11,7 @@ public class Start {
     private static final String TASK_DISPATCHER_SERVICE_NAME = "TaskDispatcher";
     public static void main(String[] args) {
         try {
-            Registry rmiRegistry = LocateRegistry.getRegistry(null);
+            Registry rmiRegistry = LocateRegistry.getRegistry("localhost", 1099);
             TaskResultsProvider taskResultsProvider = new TaskResultsProvider(rmiRegistry);
             TaskDispatcher taskDispatcher = new TaskDispatcher(new TaskExecutor(rmiRegistry, taskResultsProvider), taskResultsProvider);
             TaskDispatcherInterface stub = (TaskDispatcherInterface) UnicastRemoteObject.exportObject(taskDispatcher, 0);
@@ -41,9 +41,7 @@ class TaskDispatcher implements TaskDispatcherInterface {
     public void addTask(TaskInterface task, String executorServiceName, boolean priority) throws RemoteException {
         try {
             tasksExecutor.addTask(new Task(task, priority), executorServiceName);
-        } catch (NotBoundException e) {
-            e.printStackTrace();
-        } catch (InterruptedException e) {
+        } catch (NotBoundException | InterruptedException e) {
             e.printStackTrace();
         }
     }
@@ -51,7 +49,7 @@ class TaskDispatcher implements TaskDispatcherInterface {
 
 class TaskExecutor {
     private final ConcurrentHashMap<String, BlockingQueue<Task>> tasks = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Executor> executors = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> executors = new ConcurrentHashMap<>();
     private final Registry rmiRegistry;
     private final TaskResultsProvider taskResultsProvider;
 
@@ -61,28 +59,31 @@ class TaskExecutor {
     }
 
     public void addTask(Task task, String executorServiceName) throws RemoteException, NotBoundException, InterruptedException {
-        BlockingQueue<Task> tasksQue = tasks.putIfAbsent(executorServiceName, new PriorityBlockingQueue<>());
+        BlockingQueue<Task> tasksQue = tasks.computeIfAbsent(executorServiceName, s -> new PriorityBlockingQueue<>());
         tasksQue.put(task);
         if(!executors.containsKey(executorServiceName)) {
             ExecutorServiceInterface executor = (ExecutorServiceInterface) rmiRegistry.lookup(executorServiceName);
             ExecutorService executorService = Executors.newFixedThreadPool(executor.numberOfTasksAllowed());
-            executors.putIfAbsent(executorServiceName, executorService);
-            IntStream.range(0, executor.numberOfTasksAllowed()).forEach((i) -> {
-                executorService.execute(() -> {
-                    while(true) {
-                        try {
-                            Task taskFromQue = tasks.get(executorServiceName).take();
-                            long execResult = executor.execute(taskFromQue.getTask());
-                            taskResultsProvider.addResult(new TaskResult(taskFromQue.getTask().taskID(), execResult));
-                        } catch (RemoteException e) {
-                            e.printStackTrace();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
-            });
-
+            executors.computeIfAbsent(executorServiceName, sName -> {
+                try {
+                    IntStream.range(0, executor.numberOfTasksAllowed()).forEach((i) -> {
+                        executorService.execute(() -> {
+                            while(true) {
+                                try {
+                                    Task taskFromQue = tasks.get(sName).take();
+                                    ExecutorServiceInterface internalExecutor = (ExecutorServiceInterface) rmiRegistry.lookup(sName);
+                                    long execResult = internalExecutor.execute(taskFromQue.getTask());
+                                    taskResultsProvider.addResult(new TaskResult(taskFromQue.getTask().taskID(), execResult));
+                                } catch (RemoteException | InterruptedException | NotBoundException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
+                    });
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                }
+                return true;});
         }
     }
 }
@@ -102,9 +103,8 @@ class TaskResultsProvider{
         executor.submit(() -> {
             try {
                 while (true) {
-//                    System.out.println("taking results...");
-                    ReceiverInterface lookup = (ReceiverInterface) rmiRegistry.lookup(receiverServiceName);
                     TaskResult result = results.take();
+                    ReceiverInterface lookup = (ReceiverInterface) rmiRegistry.lookup(receiverServiceName);
                     lookup.result(result.getTaskID(), result.getResult());
                 }
             } catch (NotBoundException | RemoteException | InterruptedException e) {
@@ -138,14 +138,10 @@ class Task implements Comparable<Task> {
         return this.task;
     }
 
-    public boolean isPriority() {
-        return this.isPriority();
-    }
-
     @Override
     public int compareTo(Task o) {
-        int oPriority = o.priority ? 1 : 0;
-        int currentPriority = this.priority ? 1 : 0;
+        int oPriority = o.priority ? 0 : 1;
+        int currentPriority = this.priority ? 0 : 1;
         return currentPriority - oPriority;
     }
 }

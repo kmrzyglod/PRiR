@@ -71,18 +71,18 @@ public class PMO_Test implements PMO_LogSource {
 
 	@BeforeEach
 	public void create() {
-		try {
-			rmireg = PMO_ProcessHelper.create("rmiregistry");
-		} catch (IOException e) {
-			fail("Internal error - nie udało się uruchomić rmiregistry");
-		}
-		PMO_TimeHelper.sleep(2000);
-		try {
-			execService = PMO_ProcessHelper.create("java", "Start");
-		} catch (IOException e) {
-			fail("Nie udało się wykonać java Start");
-		}
-		PMO_TimeHelper.sleep(2000);
+//		try {
+//			rmireg = PMO_ProcessHelper.create("rmiregistry");
+//		} catch (IOException e) {
+//			fail("Internal error - nie udało się uruchomić rmiregistry");
+//		}
+//		PMO_TimeHelper.sleep(2000);
+//		try {
+//			execService = PMO_ProcessHelper.create("java", "Start");
+//		} catch (IOException e) {
+//			fail("Nie udało się wykonać java Start");
+//		}
+//		PMO_TimeHelper.sleep(2000);
 
 		Remote remote = PMO_RMIHelper.connect("TaskDispatcher");
 		assertNotNull(remote, "Nie udało się podłączyć do serwisu TaskDispatcher");
@@ -116,8 +116,8 @@ public class PMO_Test implements PMO_LogSource {
 
 	@AfterEach
 	public void shutdown() {
-		PMO_ProcessHelper.kill(execService);
-		PMO_ProcessHelper.kill(rmireg);
+//		PMO_ProcessHelper.kill(execService);
+//		PMO_ProcessHelper.kill(rmireg);
 		PMO_ProcessHelper.childrenInfo();
 	}
 
