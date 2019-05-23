@@ -120,6 +120,7 @@ public class ParallelCalculationsTest {
         Random r = new Random();
         when(pointsGeneratorMock.getPoint()).thenAnswer(invocation -> {
             PointGeneratorInterface.Point2D randomPoint = new PointGeneratorInterface.Point2D(r.ints(0, PointGeneratorInterface.MAX_POSITION + 1).findFirst().getAsInt(), r.ints(0, PointGeneratorInterface.MAX_POSITION + 1).findFirst().getAsInt());
+            Thread.sleep(200);
             generatedPoints.add(randomPoint);
             return randomPoint;
         });

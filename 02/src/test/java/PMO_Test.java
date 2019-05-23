@@ -5,9 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static java.time.Duration.ofMillis;
 
 public class PMO_Test {
 	//////////////////////////////////////////////////////////////////////////
@@ -21,7 +23,13 @@ public class PMO_Test {
 	static {
 		tariff.put("initalStateTest", 3.0);
 		tariff.put("terminationTest", 3.0);
-		tariff.put("suspensionTest",3.0);
+		tariff.put("suspensionTest", 3.0);
+		tariff.put("resumptionTest", 3.0);
+		tariff.put("normalWork", 3.0);
+		tariff.put("fastWork", 3.0);
+		tariff.put("testValues", 3.0);
+		tariff.put("testValuesResume", 3.0);
+		tariff.put("testMaxPositionPlus1", 0.2);
 	}
 
 	public static double getTariff(String testName) {
@@ -60,9 +68,13 @@ public class PMO_Test {
 		}
 	}
 
+	private Object createObject() {
+		return PMO_InstanceHelper.fabric("ParallelCalculations", "ParallelCalculationsInterface");
+	}
+
 	@BeforeEach
 	public void create() {
-		Object o = PMO_InstanceHelper.fabric("ParallelCalculations", "ParallelCalculationsInterface");
+		Object o = createObject();
 
 		try {
 			pci = (ParallelCalculationsInterface) o;
@@ -75,15 +87,15 @@ public class PMO_Test {
 			fail("Klasa ParallelCalculations nie wspiera interfejsu ParallelCalculationsInterface");
 		}
 	}
-	
+
 	@AfterEach
 	public void shutdown() {
-		if ( threadsStated ) {
+		if (threadsStated) {
 			tci.terminate();
 		}
 	}
 
-	private void getThreads(int numberOfThreads) {
+	private void getThreads(ThreadControllInterface tci, int numberOfThreads) {
 		threads = new Thread[numberOfThreads];
 		states = new Thread.State[numberOfThreads];
 		IntStream.range(0, numberOfThreads).forEach(i -> threads[i] = tci.getThread(i));
@@ -93,10 +105,15 @@ public class PMO_Test {
 	}
 
 	private void prepare(int threads, PointGeneratorInterface generator) {
+		prepare(pci, tci, threads, generator);
+	}
+
+	private void prepare(ParallelCalculationsInterface pci, ThreadControllInterface tci, int threads,
+			PointGeneratorInterface generator) {
 		tci.setNumberOfThreads(threads);
 		pci.setPointGenerator(generator);
 		tci.createThreads();
-		getThreads(threads);
+		getThreads(tci, threads);
 	}
 
 	private void getStates() {
@@ -108,19 +125,20 @@ public class PMO_Test {
 	private void testStates(String txt, Thread.State expectedState) {
 		for (int i = 0; i < states.length; i++) {
 			if (states[i] != expectedState) {
-				fail(txt + expectedState.toString() + " a jest " + states[ i ].toString() );
+				fail(txt + expectedState.toString() + " a jest " + states[i].toString());
 			}
 		}
 	}
 
-	private void testStatesTwoStates(String txt, Thread.State expectedState,  Thread.State alternatvieExpectedState) {
+	private void testNotStates(String txt, Thread.State expectedState) {
 		for (int i = 0; i < states.length; i++) {
-			if (states[i] != expectedState && states[i] != alternatvieExpectedState) {
-				fail(txt + expectedState.toString() + " a jest " + states[ i ].toString() );
+			if (states[i] == expectedState) {
+				fail(txt + expectedState.toString());
 			}
 		}
 	}
 
+//	@Disabled
 	@Test
 	public void initalStateTest() {
 		prepare(4, new PMO_SimpleGenerator(new PointGeneratorInterface.Point2D(1, 1)));
@@ -128,36 +146,239 @@ public class PMO_Test {
 		testStates("Po createThreads oczekiwano ", Thread.State.NEW);
 	}
 
+//	@Disabled
 	@RepeatedTest(10)
 	public void terminationTest() {
 		prepare(10, new PMO_SimpleGenerator(new PointGeneratorInterface.Point2D(1, 1)));
 		tci.start();
 		tci.terminate();
 		getStates();
-		testStates("Po metodzie terminate oczekiwano ", Thread.State.TERMINATED );
+		testStates("Po metodzie terminate oczekiwano ", Thread.State.TERMINATED);
 	}
-	
-	@RepeatedTest(10)
+
+//	@Disabled
+	@RepeatedTest(20)
 	public void suspensionTest() {
 		prepare(10, new PMO_SimpleGenerator(new PointGeneratorInterface.Point2D(1, 1)));
 		initalStateTest();
 		tci.start();
 		tci.suspend();
 		getStates();
-		testStates("Po metodzie suspend oczekiwano ", Thread.State.WAITING );		
+		testStates("Po metodzie suspend oczekiwano ", Thread.State.WAITING);
 	}
 
-	@RepeatedTest(10)
-	public void resumeTest() {
+//	@Disabled
+	@RepeatedTest(20)
+	public void resumptionTest() {
 		prepare(10, new PMO_SimpleGenerator(new PointGeneratorInterface.Point2D(1, 1)));
 		initalStateTest();
 		tci.start();
 		tci.suspend();
-		getStates();
-		testStates("Po metodzie suspend oczekiwano ", Thread.State.WAITING );
 		tci.resume();
 		getStates();
-		testStatesTwoStates("Po metodzie suspend oczekiwano ", Thread.State.RUNNABLE, Thread.State.BLOCKED);
-		tci.terminate();
+		testNotStates("Po metodzie resume nie oczekiwano ", Thread.State.WAITING);
+		tci.suspend();
 	}
+
+	private void testValues(ParallelCalculationsInterface pci, long expectedSum, int[][] histogram) {
+		long sum = pci.getSum();
+		assertEquals(expectedSum, sum, "Uzyskano błędny wynik sumy");
+
+		// powinno być bez -1, ale bled rozmiaru histogramu wykrywa inny test
+		for (int i = 0; i < histogram.length-1; i++)
+			for (int j = 0; j < histogram.length-1; j++) {
+				assertEquals(histogram[i][j], pci.getCountsInBucket(i, j),
+						"Błędny histogram na pozycji " + i + ", " + j);
+			}
+
+	}
+
+//	@Disabled
+	@RepeatedTest(10)
+	public void normalWork() {
+
+		int sizeE = PMO_PointsRepository.estimateSize(PMO_Consts.NORMAL_WORK_TEST_TIME, PMO_Consts.NORMAL_WORK_DELAY,
+				PMO_Consts.NORMAL_WORK_THREADS);
+		int size = sizeE + PMO_Consts.NORMAL_WORK_POINTS_SIZE_ADD;
+
+		List<PointGeneratorInterface.Point2D> points = PMO_PointsRepository.getRepository(size);
+
+		AtomicBoolean suspendedFlag = new AtomicBoolean(false);
+		PMO_SlowPointGenerator generator = new PMO_SlowPointGenerator(suspendedFlag, PMO_Consts.NORMAL_WORK_DELAY,
+				PMO_Consts.NORMAL_WORK_THREADS, points);
+
+		prepare(PMO_Consts.NORMAL_WORK_THREADS, generator);
+
+		assertTimeout(ofMillis(PMO_Consts.NORMAL_WORK_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+			tci.start();
+			PMO_TimeHelper.sleep(PMO_Consts.NORMAL_WORK_TEST_TIME);
+			tci.suspend();
+			suspendedFlag.set(true);
+			getStates();
+		});
+
+		testStates("Po metodzie suspend oczekiwano ", Thread.State.WAITING);
+		generator.test();
+
+		int ths = generator.getMaxThreads();
+
+		assertFalse(ths == 1,
+				"Program działa sekwencyjnie. Wykryto, że tylko jeden wątek wywołuje jednocześnie getPoint()");
+
+		assertTrue(ths >= PMO_Consts.NORMAL_WORK_THREADS_REQUIRED,
+				"Oczekiwano współbieżnego pobierania punktów z generatora. " + "Maksymalnie wykryto " + ths
+						+ " watkow wykonujących jednocześnie getPoint()");
+
+		double efficiency = generator.getIndex() / (double) sizeE;
+
+		assertTrue(efficiency > PMO_Consts.NORMAL_WORK_EFFICIENCY_LIMIT, "Zbyt mała efektywność pracy. Oczekiwano "
+				+ PMO_Consts.NORMAL_WORK_EFFICIENCY_LIMIT + " a jest " + efficiency);
+
+	}
+
+	@RepeatedTest(5)
+	public void fastWork() {
+
+		List<PointGeneratorInterface.Point2D> randomPoints = PMO_PointsRepository
+				.getRepository(PMO_Consts.FAST_WORK_SIZE);
+
+		AtomicBoolean suspendedFlag = new AtomicBoolean(false);
+		PMO_SlowPointGenerator fullGenerator = new PMO_SlowPointGenerator(suspendedFlag, PMO_Consts.FAST_WORK_DELAY,
+				PMO_Consts.FAST_WORK_THREADS, randomPoints);
+		PMO_SlowPointGenerator halfGenerator = new PMO_SlowPointGenerator(suspendedFlag, PMO_Consts.FAST_WORK_DELAY,
+				PMO_Consts.FAST_WORK_THREADS / 2, randomPoints);
+
+		Object oFull = createObject();
+		Object oHalf = createObject();
+
+		ParallelCalculationsInterface pciFull = (ParallelCalculationsInterface) oFull;
+		ThreadControllInterface tciFull = (ThreadControllInterface) oFull;
+
+		ParallelCalculationsInterface pciHalf = (ParallelCalculationsInterface) oHalf;
+		ThreadControllInterface tciHalf = (ThreadControllInterface) oHalf;
+
+		prepare(pciFull, tciFull, PMO_Consts.FAST_WORK_THREADS, fullGenerator);
+		prepare(pciHalf, tciHalf, PMO_Consts.FAST_WORK_THREADS / 2, halfGenerator);
+
+		assertTimeout(ofMillis(PMO_Consts.FAST_WORK_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+			tciHalf.start();
+			PMO_TimeHelper.sleep(PMO_Consts.FAST_WORK_TEST_TIME);
+			tciHalf.suspend();
+		});
+
+		assertTimeout(ofMillis(PMO_Consts.FAST_WORK_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+			tciFull.start();
+			PMO_TimeHelper.sleep(PMO_Consts.FAST_WORK_TEST_TIME);
+			tciFull.suspend();
+		});
+
+		double speedUp = (double) fullGenerator.getIndex() / (double) halfGenerator.getIndex();
+		System.out.println(
+				"speedUp = " + speedUp + " full = " + fullGenerator.getIndex() + " half = " + halfGenerator.getIndex());
+
+		double efficiency = speedUp / 2;
+
+		assertTrue(efficiency > PMO_Consts.FAST_WORK_EFFICIENCY_LIMIT, "Zbyt mała efektywność pracy. Oczekiwano "
+				+ PMO_Consts.FAST_WORK_EFFICIENCY_LIMIT + " a jest " + efficiency);
+	}
+
+//	@Disabled
+	@RepeatedTest(25)
+	public void testValues() {
+		List<PointGeneratorInterface.Point2D> randomPoints;
+
+		randomPoints = PMO_PointsRepository.getRepository(PMO_Consts.FAST_WORK_SIZE);
+
+		PMO_FastPointGenerator randomGenerator = new PMO_FastPointGenerator(randomPoints);
+
+		Object oRandom = createObject();
+
+		ParallelCalculationsInterface pciRandom = (ParallelCalculationsInterface) oRandom;
+		ThreadControllInterface tciRandom = (ThreadControllInterface) oRandom;
+
+		prepare(pciRandom, tciRandom, PMO_Consts.FAST_WORK_THREADS, randomGenerator);
+
+		assertTimeout(ofMillis(PMO_Consts.VALUES_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+			tciRandom.start();
+			PMO_TimeHelper.sleep(PMO_Consts.VALUES_TEST_TIME);
+			tciRandom.suspend();
+		});
+
+		long sum1 = randomGenerator.getSum();
+		testValues(pciRandom, sum1, randomGenerator.getHistogram());
+	}
+
+//	@Disabled
+	@RepeatedTest(3)
+	public void testValuesResume() {
+		List<PointGeneratorInterface.Point2D> randomPoints;
+
+		randomPoints = PMO_PointsRepository.getRepository(PMO_Consts.FAST_WORK_SIZE);
+
+		PMO_FastPointGenerator randomGenerator = new PMO_FastPointGenerator(randomPoints);
+
+		Object oRandom = createObject();
+
+		ParallelCalculationsInterface pciRandom = (ParallelCalculationsInterface) oRandom;
+		ThreadControllInterface tciRandom = (ThreadControllInterface) oRandom;
+
+		prepare(pciRandom, tciRandom, PMO_Consts.FAST_WORK_THREADS, randomGenerator);
+
+		assertTimeout(ofMillis(PMO_Consts.VALUES_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+			tciRandom.start();
+			PMO_TimeHelper.sleep(PMO_Consts.VALUES_TEST_TIME);
+			tciRandom.suspend();
+		});
+		long sum1 = randomGenerator.getSum();
+
+		for (int i = 0; i < PMO_Consts.RESUME_REPETITIONS; i++)
+			assertTimeout(ofMillis(PMO_Consts.RESUME_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+				tciRandom.resume();
+				PMO_TimeHelper.sleep(PMO_Consts.RESUME_TEST_TIME);
+				tciRandom.suspend();
+			});
+
+		long sum2 = randomGenerator.getSum();
+		testValues(pciRandom, sum2, randomGenerator.getHistogram());
+
+		assertTrue(sum2 > sum1, "Oczekiwano wznowienia pracy po wykonaniu resume");
+	}
+
+//	@Disabled
+	@Test()
+	public void testMaxPositionPlus1() {
+		List<PointGeneratorInterface.Point2D> randomPoints;
+
+		int sizep1 = PointGeneratorInterface.MAX_POSITION + 1;
+
+		randomPoints = PMO_PointsRepository.getRepository(PMO_Consts.FAST_WORK_SIZE / 4);
+
+		IntStream.range(0, 3 * PMO_Consts.FAST_WORK_SIZE / 4).forEach(i -> {
+			int pos = i % sizep1;
+			randomPoints.add(new PointGeneratorInterface.Point2D(pos, pos));
+		});
+
+		PMO_FastPointGenerator randomGenerator = new PMO_FastPointGenerator(randomPoints);
+
+		Object oRandom = createObject();
+
+		ParallelCalculationsInterface pciRandom = (ParallelCalculationsInterface) oRandom;
+		ThreadControllInterface tciRandom = (ThreadControllInterface) oRandom;
+
+		prepare(pciRandom, tciRandom, PMO_Consts.FAST_WORK_THREADS, randomGenerator);
+
+		assertTimeout(ofMillis(PMO_Consts.FAST_WORK_TEST_TIME + 5 * PMO_Consts.NORMAL_WORK_DELAY), () -> {
+			tciRandom.start();
+			tciRandom.suspend();
+		});
+
+		try {
+			pciRandom.getCountsInBucket(PointGeneratorInterface.MAX_POSITION, PointGeneratorInterface.MAX_POSITION);
+		} catch (ArrayIndexOutOfBoundsException e) {
+			fail("Najprawdopodobniej program nie uwzględnia, że rozmiar położenie punktu MAX_POSITION jest poprawne");
+		} catch (Exception e) {
+			fail("Metoda getCountsInBucket wygenerowała wyjątek " + e.toString());
+		}
+	}
+
 }
