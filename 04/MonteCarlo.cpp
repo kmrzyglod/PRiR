@@ -31,8 +31,9 @@ double MonteCarlo::calcMinOfMinDistance() {
 	double drMinSQ = 100000.0;
 	double tmp;
 	int i;
-	#pragma omp parallel for default(none) shared(drMinSQ) private(i, tmp) schedule(runtime)
-	for (i = 0; i < particles->getNumberOfParticles(); i++ ) {
+	int numOfParticles = particles->getNumberOfParticles();
+	#pragma omp parallel for shared(drMinSQ, numOfParticles) private(i, tmp) 
+	for (i = 0; i < numOfParticles; i++ ) {
 		tmp = particles->getDistanceSQToClosest(i);
 		if ( tmp < drMinSQ )
 			drMinSQ = tmp;
@@ -53,8 +54,8 @@ void MonteCarlo::setPotential( PotentialEnergy *energy ) {
 double MonteCarlo::calcContribution( int idx, double xx, double yy ) {
 	double sum = 0;
 	int i;
-	#pragma omp parallel for default(none) shared(idx, xx, yy) private(i) \
-        reduction(+ : sum) schedule(guided, 50)
+	#pragma omp parallel for shared(idx, xx, yy) private(i) \
+        reduction(+ : sum) 
 	for (i = 0; i < particles->getNumberOfParticles(); i++ ) {
 		if (i == idx) {
 			continue;
@@ -69,8 +70,8 @@ double MonteCarlo::calcContribution( int idx, double xx, double yy ) {
 double MonteCarlo::calcTotalPotentialEnergy() {
 	double tmp = 0;
 	int i;
-	#pragma omp parallel for default(none)  private(i) \
-        reduction(+ : tmp) schedule(runtime)
+	#pragma omp parallel for private(i) \
+        reduction(+ : tmp)
 	for (i = 0; i < particles->getNumberOfParticles(); i++ )
 		tmp += calcContribution( i, particles->getX( i ), particles->getY( i ) );
 
@@ -130,16 +131,19 @@ void MonteCarlo::calcMC( int draws ) {
 // to proszę zrównoleglić
 long *MonteCarlo::getHistogram( int size ) {
 	long *result = new long[ size ];
+	#pragma omp parallel for 
 	for ( int i = 0; i < size; i++ )
 		result[ i ] = 0;
 
-	int idx;
+	int i, j;
 	double scale = size / particles->getBoxSize();
 
-	//#pragma omp parallel for
-	for ( int i = 0; i < particles->getNumberOfParticles(); i++ ) {
-		for ( int j = 0; j < i; j++  ) {
-			idx = (int)( particles->getDistanceBetween( i, j ) * scale );
+	#pragma omp parallel for private(j) schedule(guided) 
+	for (i = 0; i < particles->getNumberOfParticles(); i++ ) {
+		//#pragma omp parallel for schedule(dynamic, 1000) 
+		for (j = 0; j < i; j++  ) {
+			int idx = (int)( particles->getDistanceBetween( i, j ) * scale );
+			#pragma omp atomic
 			result[ idx ] ++;
 		}
 	}
