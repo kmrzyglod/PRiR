@@ -57,6 +57,7 @@ void MonteCarlo::setPotential(PotentialEnergy* energy) {
 // to proszę zrównoleglić
 double MonteCarlo::calcContribution(int idx, double xx, double yy) {
     double sum = 0;
+    int numOfParticles = particles->getNumberOfParticles();
 #pragma omp parallel 
     {
 #pragma omp for nowait reduction(+ : sum) 
@@ -64,7 +65,7 @@ double MonteCarlo::calcContribution(int idx, double xx, double yy) {
             sum += energy->getPotentialEnergyDistanceSQ(particles->getDistanceBetweenSQ(i, xx, yy));
         }
 #pragma omp for nowait reduction(+ : sum) 
-        for (int i = idx + 1; i < particles->getNumberOfParticles(); i++) {
+        for (int i = idx + 1; i < numOfParticles; i++) {
             sum += energy->getPotentialEnergyDistanceSQ(particles->getDistanceBetweenSQ(i, xx, yy));
 
         }
@@ -76,8 +77,9 @@ double MonteCarlo::calcContribution(int idx, double xx, double yy) {
 // to proszę zrównoleglić
 double MonteCarlo::calcTotalPotentialEnergy() {
     double tmp = 0;
+    int numOfParticles = particles->getNumberOfParticles();
 #pragma omp parallel for reduction(+ : tmp) 
-    for (int i = 0; i < particles->getNumberOfParticles(); i++)
+    for (int i = 0; i < numOfParticles; i++)
         tmp += calcContribution(i, particles->getX(i), particles->getY(i));
 
     totalEp = tmp * 0.5;
