@@ -82,15 +82,6 @@ class BillingModule {
     public long substractTime(String number, long time) {
         return subscriptions.compute(number, (k, value) -> value - time);
     }
-
-//    public List<String> getAllNumbersWithNoFunds() {
-//        return subscriptions
-//                .entrySet()
-//                .stream()
-//                .filter(entry -> entry.getValue() <= 0)
-//                .map(entry -> entry.getKey())
-//                .collect(Collectors.toList());
-//    }
 }
 
 class ConnectionsManager {
@@ -98,8 +89,6 @@ class ConnectionsManager {
     private final BillingModule billingModule;
     private final Map<String, Connection> connections = new ConcurrentHashMap<>();
     private final Set<String> potentialConnections = new HashSet<>();
-
-   // private long previousExecutionTime = 0;
 
     public ConnectionsManager(Map<String, PhoneInterface> phones, BillingModule billingModule) {
         this.phones = phones;
