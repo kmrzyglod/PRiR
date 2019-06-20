@@ -3,7 +3,7 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class AccountingSystem implements AccountingSystemInterface {
-    private final Map<String, PhoneInterface> phones = new ConcurrentHashMap<>();
+    private final Map<String, PhoneInterface> phones = new HashMap<>();
     private final BillingModule billingModule;
     private final ConnectionsManager connectionsManager;
 
@@ -14,7 +14,7 @@ public class AccountingSystem implements AccountingSystemInterface {
 
     @Override
     public void phoneRegistration(String number, PhoneInterface phone) {
-        phones.putIfAbsent(number, phone);
+        phones.put(number, phone);
     }
 
     @Override
@@ -102,7 +102,9 @@ class ConnectionsManager {
                     || !phones.containsKey(numberTo)
                     || billingModule.getRemainingTime(numberFrom).get() <= 0
                     || potentialConnections.contains(numberFrom)
-                    || potentialConnections.contains(numberTo)) {
+                    || potentialConnections.contains(numberTo)
+                    || connections.containsKey(numberFrom)
+                    || connections.containsKey(numberTo)) {
                 return false;
             }
             potentialConnections.add(numberFrom);
@@ -124,16 +126,13 @@ class ConnectionsManager {
         ScheduledExecutorService billingCounterService = Executors.newSingleThreadScheduledExecutor();
         newConnection.setCostCalculation(billingCounterService);
         billingCounterService.scheduleWithFixedDelay(()-> {
-            //long startTime = System.nanoTime();
-            newConnection.addConnectionTime(50);
-            billingModule.substractTime(numberFrom, 50 );
+            newConnection.addConnectionTime(30);
+            billingModule.substractTime(numberFrom, 30 );
 
             if(billingModule.getRemainingTime(numberFrom).get() <= 0) {
                 disconnection(numberFrom);
             }
-            // long endTime = System.nanoTime();
-            //previousExecutionTime = (endTime - startTime)/1000000;
-        }, 0, 50, TimeUnit.MILLISECONDS);
+        }, 0, 30, TimeUnit.MILLISECONDS);
 
         return true;
     }
